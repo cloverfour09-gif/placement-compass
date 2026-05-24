@@ -76,10 +76,6 @@ export default function SkillMapping() {
 
       {companies.length === 0 ? (
         <EmptyState icon={<Brain className="h-5 w-5" />} />
-      ) : skills.length === 0 ? (
-        <div className="border border-dashed border-border rounded-xl p-10 text-center text-sm text-muted-foreground">
-          Add at least one skill to see fit results.
-        </div>
       ) : (
         <div className="grid gap-3">
           {matches.map(({ company, score, gaps }) => {
