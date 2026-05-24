@@ -1,0 +1,97 @@
+##############################################################
+# docker-compose.yml — Placement Compass Production Stack
+#
+# Services:
+#   frontend  – React/Vite SPA served by Nginx (port 80)
+#   backend   – FastAPI + LangGraph agent (port 8000, internal)
+#
+# NOTE: The database is Supabase (hosted cloud service).
+#       No local PostgreSQL container is needed because the
+#       application has no self-hosted DB connection code.
+#       The backend uses in-memory run state only.
+##############################################################
+version: "3.9"
+
+networks:
+  app_network:
+    driver: bridge
+
+volumes:
+  backend_output:
+    driver: local
+
+services:
+
+  # ────────────────────────────────────────────────────────
+  # Backend – FastAPI + LangGraph
+  # ────────────────────────────────────────────────────────
+  backend:
+    image: ${DOCKER_HUB_USERNAME}/placement-compass-backend:${IMAGE_TAG:-latest}
+    container_name: placement_compass_backend
+    restart: unless-stopped
+    networks:
+      - app_network
+
+    # Mount a named volume so that any generated golden-record JSON
+    # files persisted to OUTPUT_DIR survive container restarts.
+    volumes:
+      - backend_output:/app/output
+
+    environment:
+      # ── LLM Provider Keys (injected at runtime, never baked in) ──
+      GOOGLE_API_KEY:        ${GOOGLE_API_KEY}
+      GITHUB_TOKEN:          ${GITHUB_TOKEN}
+      GROQ_API_KEY:          ${GROQ_API_KEY}
+      SAMBANOVA_API_KEY:     ${SAMBANOVA_API_KEY}
+      DEEPSEEK_API_KEY:      ${DEEPSEEK_API_KEY:-}
+
+      # ── LangSmith Tracing ─────────────────────────────────────────
+      LANGCHAIN_TRACING_V2:  ${LANGCHAIN_TRACING_V2:-false}
+      LANGCHAIN_API_KEY:     ${LANGCHAIN_API_KEY:-}
+      LANGCHAIN_PROJECT:     ${LANGCHAIN_PROJECT:-langgraph-pipeline}
+      LANGCHAIN_ENDPOINT:    ${LANGCHAIN_ENDPOINT:-https://api.smith.langchain.com}
+
+      # ── Pipeline Behaviour ────────────────────────────────────────
+      OUTPUT_DIR:            /app/output
+      MAX_RETRIES:           ${MAX_RETRIES:-3}
+      BATCH_SIZE:            ${BATCH_SIZE:-20}
+      CONCURRENCY_LIMIT:     ${CONCURRENCY_LIMIT:-3}
+
+      # ── API Server ────────────────────────────────────────────────
+      API_VERSION:           ${API_VERSION:-1.0.0}
+      CORS_ORIGINS:          '["http://localhost", "https://${DOMAIN:-localhost}"]'
+
+    expose:
+      - "8000"   # Internal only; Nginx reverse-proxies from port 80
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  # ────────────────────────────────────────────────────────
+  # Frontend – Nginx serving Vite/React SPA
+  # ────────────────────────────────────────────────────────
+  frontend:
+    image: ${DOCKER_HUB_USERNAME}/placement-compass-frontend:${IMAGE_TAG:-latest}
+    container_name: placement_compass_frontend
+    restart: unless-stopped
+    networks:
+      - app_network
+
+    ports:
+      - "80:80"      # HTTP
+      - "443:443"    # HTTPS (terminate SSL at host or via Certbot)
+
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s

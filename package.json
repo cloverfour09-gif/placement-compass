@@ -1,0 +1,9 @@
+{
+  "name": "placement-compass-root",
+  "private": true,
+  "scripts": {
+    "dev": "cd placement-compass-16-main && npm run dev",
+    "install": "cd placement-compass-16-main && npm install",
+    "build": "cd placement-compass-16-main && npm run build"
+  }
+}

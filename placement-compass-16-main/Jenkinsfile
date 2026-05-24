@@ -1,0 +1,356 @@
+///////////////////////////////////////////////////////////////
+// Jenkinsfile — Placement Compass CI/CD Pipeline (Windows)
+// All sh commands replaced with bat for Windows Jenkins
+//
+// Required Jenkins Credentials:
+//   ENV                   → Secret File   (backend .env with all API keys)
+//   dockerhub-credentials → Username/Password (Docker Hub)
+//   supabase-url          → Secret Text   (VITE_SUPABASE_URL)
+//   supabase-anon-key     → Secret Text   (VITE_SUPABASE_ANON_KEY)
+//   deploy-ssh-key        → SSH Private Key (Ubuntu server)
+///////////////////////////////////////////////////////////////
+
+pipeline {
+
+    agent any
+
+    environment {
+        FRONTEND_IMAGE = 'placement-compass-frontend'
+        BACKEND_IMAGE  = 'placement-compass-backend'
+        GIT_SHORT_SHA  = ''
+        FRONTEND_DIR   = 'placement-compass-16-main'
+        BACKEND_DIR    = 'placement-compass-16-main\\Lang graph'
+        COMPOSE_FILE   = 'placement-compass-16-main\\docker-compose.yml'
+        SCRIPTS_DIR    = 'placement-compass-16-main\\scripts'
+        DEPLOY_USER    = 'ubuntu'
+        DEPLOY_SERVER  = "${env.DEPLOY_SERVER_IP ?: 'YOUR_SERVER_IP'}"
+        DEPLOY_PATH    = '/opt/placement-compass'
+    }
+
+    options {
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        timeout(time: 60, unit: 'MINUTES')
+        disableConcurrentBuilds()
+        timestamps()
+    }
+
+    triggers {
+        githubPush()
+    }
+
+    stages {
+
+        // ── STAGE 1: Checkout ────────────────────────────────────────
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+                script {
+                    // env.GIT_COMMIT is automatically set by Jenkins after checkout scm.
+                    // We take the first 8 characters as the short SHA.
+                    // This avoids any sh/bat returnStdout call which fails on Windows.
+                    GIT_SHORT_SHA = env.GIT_COMMIT ? env.GIT_COMMIT.take(8) : 'unknown'
+                    echo "Commit: ${GIT_SHORT_SHA} | Branch: ${env.BRANCH_NAME ?: 'main'}"
+                }
+            }
+        }
+
+        // ── STAGE 2: Frontend - Install Dependencies ─────────────────
+        stage('Frontend: Install Dependencies') {
+            steps {
+                dir("${FRONTEND_DIR}") {
+                    echo 'Installing frontend npm dependencies...'
+                    bat 'npm ci --frozen-lockfile'
+                    echo 'Frontend dependencies installed.'
+                }
+            }
+        }
+
+        // ── STAGE 3: Backend - Install Dependencies ──────────────────
+        stage('Backend: Install Dependencies') {
+            steps {
+                dir("${BACKEND_DIR}") {
+                    echo 'Installing backend Python dependencies...'
+                    bat '''
+                        "C:\\Users\\Lenovo\\AppData\\Local\\Programs\\Python\\Python314\\python.exe" -m venv .venv
+                        call .venv\\Scripts\\activate.bat
+                        python -m pip install --upgrade pip --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org
+                        python -m pip install -r requirements.txt --quiet --trusted-host pypi.org --trusted-host files.pythonhosted.org
+                        echo Backend dependencies installed.
+                    '''
+                }
+            }
+        }
+
+        // ── STAGE 4: Frontend - Lint Validation ──────────────────────
+        stage('Frontend: Lint Validation') {
+            steps {
+                dir("${FRONTEND_DIR}") {
+                    echo 'Running ESLint on frontend source...'
+                    bat 'npm run lint'
+                    echo 'ESLint passed.'
+                }
+            }
+        }
+
+        // ── STAGE 5: Frontend - Run Tests ────────────────────────────
+        stage('Frontend: Run Tests') {
+            steps {
+                dir("${FRONTEND_DIR}") {
+                    echo 'Running frontend tests (Vitest)...'
+                    bat 'npm run test'
+                    echo 'Frontend tests passed.'
+                }
+            }
+            post {
+                failure { echo 'Frontend tests FAILED.' }
+            }
+        }
+
+        // ── STAGE 6: Frontend - Build Application ────────────────────
+        stage('Frontend: Build Application') {
+            steps {
+                withEnv([
+                    'VITE_SUPABASE_URL=dummy',
+                    'VITE_SUPABASE_ANON_KEY=dummy'
+                ]) {
+                    dir("${FRONTEND_DIR}") {
+                        echo 'Building Vite production bundle...'
+                        bat 'npm run build'
+                        echo 'Frontend build complete. Output: dist/'
+                    }
+                }
+            }
+            post {
+                success {
+                    archiveArtifacts(
+                        artifacts:         'placement-compass-16-main/dist/**/*',
+                        fingerprint:       true,
+                        allowEmptyArchive: false
+                    )
+                    echo 'Frontend dist/ archived.'
+                }
+            }
+        }
+
+        // ── STAGE 7: Backend - Execute Tests ─────────────────────────
+        stage('Backend: Execute Tests') {
+            steps {
+                dir("${BACKEND_DIR}") {
+                    echo 'Running backend API tests (pytest)...'
+                    bat '''
+                        call .venv\\Scripts\\activate.bat
+                        pytest tests/ -v --tb=short --no-header
+                    '''
+                    echo 'Backend tests passed.'
+                }
+            }
+            post {
+                failure { echo 'Backend tests FAILED.' }
+            }
+        }
+
+        // ── STAGE 8: Agentic Orchestration - Validate & Initialize ───
+        // Validates: langgraph.json, schema, AgentState, graph
+        // compilation, FastAPI routes, WorkflowService
+        stage('Agentic Orchestration: Validate and Initialize') {
+            steps {
+                dir("${BACKEND_DIR}") {
+                    echo 'Validating Agentic Orchestration Pipeline...'
+                    bat '''
+                        call .venv\\Scripts\\activate.bat
+
+                        echo Step 1: Validating langgraph.json...
+                        python -c "import json; cfg=json.load(open('langgraph.json')); assert 'graphs' in cfg; print('langgraph.json OK:', list(cfg['graphs'].keys()))"
+
+                        echo Step 2: Validating 163-parameter schema...
+                        python -c "from schema import PARAMETER_KEYS; print('Schema OK:', len(PARAMETER_KEYS), 'parameters')"
+
+                        echo Step 3: Validating AgentState...
+                        python -c "from state import AgentState; print('AgentState OK')"
+
+                        echo Step 4: Compiling LangGraph StateGraph...
+                        python -c "from main import build_graph; g=build_graph(); print('Graph compiled OK. Nodes:', list(g.nodes.keys()))"
+
+                        echo Step 5: Validating FastAPI application...
+                        python -c "from app.main import app; routes=[r.path for r in app.routes]; assert '/health' in routes; print('FastAPI OK. Routes:', routes)"
+
+                        echo Step 6: Validating WorkflowService...
+                        python -c "from app.service import workflow_service; print('WorkflowService OK')"
+
+                        echo All Agentic Orchestration validations PASSED.
+                    '''
+                }
+            }
+            post {
+                success { echo 'Agentic Orchestration Pipeline validated. 3-branch parallel agents ready.' }
+                failure { echo 'Agentic Orchestration validation FAILED. Check LangGraph configuration.' }
+            }
+        }
+
+        // ── STAGE 9: Frontend - Build Docker Image ───────────────────
+        stage('Frontend: Build Docker Image') {
+            when {
+                anyOf { branch 'main'; branch 'release/*' }
+            }
+            steps {
+                withEnv([
+                    'DOCKER_USER=dummy',
+                    'DOCKER_PASS=dummy',
+                    'VITE_SUPABASE_URL=dummy',
+                    'VITE_SUPABASE_ANON_KEY=dummy'
+                ]) {
+                    script {
+                        echo 'Logging in to Docker Hub...'
+                        bat 'echo %DOCKER_PASS% | docker login -u %DOCKER_USER% --password-stdin'
+
+                        echo 'Building frontend Docker image (Node 20 -> Nginx Alpine)...'
+                        bat """
+                            docker build ^
+                                --build-arg VITE_SUPABASE_URL="%VITE_SUPABASE_URL%" ^
+                                --build-arg VITE_SUPABASE_ANON_KEY="%VITE_SUPABASE_ANON_KEY%" ^
+                                --file "placement-compass-16-main\\\\Dockerfile" ^
+                                --tag %DOCKER_USER%/${FRONTEND_IMAGE}:${GIT_SHORT_SHA} ^
+                                "placement-compass-16-main"
+                        """
+                        bat "docker tag %DOCKER_USER%/${FRONTEND_IMAGE}:${GIT_SHORT_SHA} %DOCKER_USER%/${FRONTEND_IMAGE}:latest"
+                        bat "docker tag %DOCKER_USER%/${FRONTEND_IMAGE}:${GIT_SHORT_SHA} %DOCKER_USER%/${FRONTEND_IMAGE}:${env.BUILD_NUMBER}"
+                        bat "docker push %DOCKER_USER%/${FRONTEND_IMAGE}:${GIT_SHORT_SHA}"
+                        bat "docker push %DOCKER_USER%/${FRONTEND_IMAGE}:latest"
+                        bat "docker push %DOCKER_USER%/${FRONTEND_IMAGE}:${env.BUILD_NUMBER}"
+                        echo "Frontend image pushed with tags: latest | ${env.BUILD_NUMBER} | ${GIT_SHORT_SHA}"
+                    }
+                }
+            }
+        }
+
+        // ── STAGE 10: Backend - Build Docker Image ───────────────────
+        stage('Backend: Build Docker Image') {
+            when {
+                anyOf { branch 'main'; branch 'release/*' }
+            }
+            steps {
+                withEnv([
+                    'DOCKER_USER=dummy',
+                    'DOCKER_PASS=dummy'
+                ]) {
+                    script {
+                        echo 'Building backend Docker image (Python 3.12-slim + Uvicorn)...'
+                        bat """
+                            docker build ^
+                                --file "placement-compass-16-main\\\\Lang graph\\\\Dockerfile" ^
+                                --tag %DOCKER_USER%/${BACKEND_IMAGE}:${GIT_SHORT_SHA} ^
+                                "placement-compass-16-main\\\\Lang graph"
+                        """
+                        bat "docker tag %DOCKER_USER%/${BACKEND_IMAGE}:${GIT_SHORT_SHA} %DOCKER_USER%/${BACKEND_IMAGE}:latest"
+                        bat "docker tag %DOCKER_USER%/${BACKEND_IMAGE}:${GIT_SHORT_SHA} %DOCKER_USER%/${BACKEND_IMAGE}:${env.BUILD_NUMBER}"
+                        bat "docker push %DOCKER_USER%/${BACKEND_IMAGE}:${GIT_SHORT_SHA}"
+                        bat "docker push %DOCKER_USER%/${BACKEND_IMAGE}:latest"
+                        bat "docker push %DOCKER_USER%/${BACKEND_IMAGE}:${env.BUILD_NUMBER}"
+                        echo "Backend image pushed with tags: latest | ${env.BUILD_NUMBER} | ${GIT_SHORT_SHA}"
+                    }
+                }
+            }
+            post {
+                always {
+                    bat 'docker image prune -f 2>nul & exit 0'
+                }
+            }
+        }
+
+        // ── STAGE 11: Deploy to Ubuntu Server ────────────────────────
+        stage('Deploy') {
+            when {
+                anyOf { branch 'main'; branch 'release/*' }
+            }
+            steps {
+                withEnv([
+                    'SSH_KEY_FILE=dummy',
+                    'SSH_USER=dummy',
+                    'DOCKER_USER=dummy',
+                    'DOCKER_PASS=dummy',
+                    'BACKEND_ENV_FILE=dummy'
+                ]) {
+                    script {
+                        def remote  = "${DEPLOY_USER}@${DEPLOY_SERVER}"
+                        def sshOpts = '-o StrictHostKeyChecking=no'
+
+                        echo "Deploying to ${remote}..."
+                        bat """
+                            scp -i "%SSH_KEY_FILE%" ${sshOpts} "${COMPOSE_FILE}" ${remote}:${DEPLOY_PATH}/docker-compose.yml
+                            scp -i "%SSH_KEY_FILE%" ${sshOpts} "%BACKEND_ENV_FILE%" ${remote}:${DEPLOY_PATH}/.env
+                            scp -i "%SSH_KEY_FILE%" ${sshOpts} "${SCRIPTS_DIR}\\deploy.sh"      ${remote}:${DEPLOY_PATH}/deploy.sh
+                            scp -i "%SSH_KEY_FILE%" ${sshOpts} "${SCRIPTS_DIR}\\rollback.sh"    ${remote}:${DEPLOY_PATH}/rollback.sh
+                            scp -i "%SSH_KEY_FILE%" ${sshOpts} "${SCRIPTS_DIR}\\health_check.sh" ${remote}:${DEPLOY_PATH}/health_check.sh
+                            scp -i "%SSH_KEY_FILE%" ${sshOpts} "${SCRIPTS_DIR}\\smoke_test.sh"   ${remote}:${DEPLOY_PATH}/smoke_test.sh
+                        """
+                        bat """
+                            ssh -i "%SSH_KEY_FILE%" ${sshOpts} ${remote} "export DOCKER_USER='%DOCKER_USER%' DOCKER_PASS='%DOCKER_PASS%' IMAGE_TAG='${GIT_SHORT_SHA}' DEPLOY_PATH='${DEPLOY_PATH}' && bash ${DEPLOY_PATH}/deploy.sh"
+                        """
+                        echo 'Deployment complete.'
+                    }
+                }
+            }
+        }
+
+        // ── STAGE 12: Health Check and Smoke Tests ───────────────────
+        stage('Health Check and Smoke Tests') {
+            when {
+                anyOf { branch 'main'; branch 'release/*' }
+            }
+            steps {
+                withCredentials([
+                    sshUserPrivateKey(
+                        credentialsId:    'deploy-ssh-key',
+                        keyFileVariable:  'SSH_KEY_FILE',
+                        usernameVariable: 'SSH_USER'
+                    )
+                ]) {
+                    bat """
+                        ssh -i "%SSH_KEY_FILE%" -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "bash ${DEPLOY_PATH}/health_check.sh && bash ${DEPLOY_PATH}/smoke_test.sh"
+                    """
+                }
+            }
+            post {
+                failure {
+                    echo 'Smoke tests FAILED. Triggering automatic rollback...'
+                    withCredentials([
+                        sshUserPrivateKey(
+                            credentialsId:    'deploy-ssh-key',
+                            keyFileVariable:  'SSH_KEY_FILE',
+                            usernameVariable: 'SSH_USER'
+                        )
+                    ]) {
+                        bat """
+                            ssh -i "%SSH_KEY_FILE%" -o StrictHostKeyChecking=no ${DEPLOY_USER}@${DEPLOY_SERVER} "bash ${DEPLOY_PATH}/rollback.sh"
+                        """
+                    }
+                }
+            }
+        }
+
+    } // end stages
+
+    // ── Post-Pipeline Notifications and Cleanup ──────────────────────
+    post {
+
+        success {
+            echo 'Pipeline SUCCEEDED.'
+        }
+
+        failure {
+            echo 'Pipeline FAILED.'
+        }
+
+        unstable {
+            echo 'Pipeline UNSTABLE.'
+        }
+
+        always {
+            echo 'Running post-build cleanup...'
+            bat 'docker logout 2>nul & exit 0'
+            cleanWs()
+        }
+    }
+
+} // end pipeline

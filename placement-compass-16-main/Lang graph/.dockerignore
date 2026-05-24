@@ -1,0 +1,66 @@
+# ── Python Cache ──────────────────────────────────────────
+__pycache__
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+
+# ── Virtual Environments ──────────────────────────────────
+.venv
+venv/
+env/
+ENV/
+.env
+.env.local
+
+# ── Pytest ────────────────────────────────────────────────
+.pytest_cache/
+.pytest/
+tests/__pycache__
+
+# ── LangGraph local runtime data ─────────────────────────
+.langgraph_api/
+__pycache__/
+
+# ── Logs / Output Files ───────────────────────────────────
+*.log
+output.log
+first_lines.txt
+
+# ── Generated Output (Golden Records, CSVs) ───────────────
+*_golden_record.json
+*_golden_record.md
+*.csv
+*.tsv
+*.txt
+
+# ── IDE / Editor ──────────────────────────────────────────
+.vscode
+.idea
+*.suo
+*.sw?
+
+# ── Git ───────────────────────────────────────────────────
+.git
+.gitignore
+
+# ── OS ────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── Docker files themselves ────────────────────────────────
+Dockerfile
+.dockerignore
+
+# ── Scratch / dev-only scripts ────────────────────────────
+scratch/
+smoke_test.py
+smoke_test_api.py
+csv_to_json.py
+old_agent_pipeline.py
+
+# ── Validation suite (dev only) ───────────────────────────
+Validation suite/
+
+# ── Node artefacts (mobile app not part of backend image) ─
+node_modules

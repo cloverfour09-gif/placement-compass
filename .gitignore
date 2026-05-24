@@ -1,0 +1,14 @@
+# Ignore the large zip file at root
+*.zip
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
