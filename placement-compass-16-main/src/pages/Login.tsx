@@ -25,6 +25,8 @@ export default function Login() {
       return;
     }
     setLoading(true);
+    localStorage.setItem("user_mode", mode);
+    localStorage.setItem("student_email", identifier);
     setTimeout(() => {
       setLoading(false);
       navigate(mode === "student" ? "/home" : "/analytics");

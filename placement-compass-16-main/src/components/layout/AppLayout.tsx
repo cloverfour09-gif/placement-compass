@@ -8,11 +8,14 @@ import {
   BarChart3,
   ListChecks,
   Sparkles,
+  Target,
   Menu,
   X,
 } from "lucide-react";
 import { useState } from "react";
 import { UserProfile } from "./UserProfile";
+import { SettingsPanel } from "@/components/SettingsPanel";
+import { useSettings } from "@/contexts/SettingsContext";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -24,11 +27,13 @@ const nav = [
   { to: "/analytics", label: "Analytics", icon: BarChart3 },
   { to: "/hiring-rounds", label: "Hiring Rounds", icon: ListChecks },
   { to: "/innovox", label: "Innovox", icon: Sparkles },
+  { to: "/placement-analyzer", label: "Placement Analyzer", icon: Target },
 ];
 
 export default function AppLayout() {
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
+  const { previewMode } = useSettings();
 
   return (
     <div className="min-h-screen bg-surface-muted">
@@ -90,10 +95,18 @@ export default function AppLayout() {
             <UserProfile />
           </header>
 
-          <div className="flex-1 overflow-y-auto">
-            <div className="max-w-[1400px] mx-auto p-4 sm:p-6 lg:p-8">
-              <Outlet />
+          <div className="flex-1 overflow-y-auto bg-surface-muted/30 relative">
+            <div className={cn(
+              "mx-auto transition-all duration-300 origin-top",
+              previewMode === "desktop" ? "max-w-[1400px] w-full" : 
+              previewMode === "tablet" ? "max-w-[768px] w-full border-x border-border shadow-xl min-h-full bg-surface" :
+              "max-w-[375px] w-full border-x border-border shadow-2xl min-h-full bg-surface"
+            )}>
+              <div className="p-4 sm:p-6 lg:p-8">
+                <Outlet />
+              </div>
             </div>
+            <SettingsPanel />
           </div>
         </main>
       </div>

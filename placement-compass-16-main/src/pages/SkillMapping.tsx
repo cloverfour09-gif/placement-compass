@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import type { Company } from "@/types/company";
 import { Brain, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 function asArray(v: unknown): string[] {
   if (Array.isArray(v)) return v.map(String);
@@ -85,9 +86,13 @@ export default function SkillMapping() {
             const tier = score >= 0.66 ? "High" : score >= 0.33 ? "Medium" : "Low";
             const tierColor = tier === "High" ? "text-success bg-success/10" : tier === "Medium" ? "text-warning bg-warning/10" : "text-muted-foreground bg-muted";
             return (
-              <div key={String(company.company_id)} className="rounded-xl border border-border bg-surface p-5 flex flex-col sm:flex-row gap-4">
+              <Link 
+                to={`/company/${company.company_id}`}
+                key={String(company.company_id)} 
+                className="rounded-xl border border-border bg-surface p-5 flex flex-col sm:flex-row gap-4 hover:shadow-elevated hover:border-brand/30 transition-all cursor-pointer"
+              >
                 <div className="flex-1 min-w-0">
-                  <div className="font-display font-semibold">{company.name}</div>
+                  <div className="font-display font-semibold group-hover:text-brand transition-colors">{company.name}</div>
                   <div className="text-xs text-muted-foreground mt-0.5">{company.category}</div>
                   {gaps.length > 0 && (
                     <div className="mt-3 text-xs">
@@ -100,7 +105,7 @@ export default function SkillMapping() {
                   <span className={`text-xs px-2.5 py-1 rounded-full font-medium ${tierColor}`}>{tier} fit</span>
                   <div className="font-display font-bold text-2xl text-foreground">{Math.round(score * 100)}%</div>
                 </div>
-              </div>
+              </Link>
             );
           })}
         </div>
