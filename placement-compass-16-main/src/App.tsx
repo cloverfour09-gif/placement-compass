@@ -13,8 +13,9 @@ import Companies from "./pages/Companies";
 import Categories from "./pages/Categories";
 import Compare from "./pages/Compare";
 import SkillMapping from "./pages/SkillMapping";
+import Explore from "./pages/Explore";
 import Analytics from "./pages/Analytics";
-import CompanyDetail from "./pages/CompanyDetail";
+import CompanyDetail from "./pages/CompanyDetailNew";
 import HiringRounds from "./pages/HiringRounds";
 import Innovox from "./pages/Innovox";
 import PlacementAnalyzer from "./pages/PlacementAnalyzer";
@@ -34,6 +35,7 @@ const App = () => (
             <Route path="/login" element={<Login />} />
             <Route element={<AppLayout />}>
               <Route path="/home" element={<Home />} />
+              <Route path="/explore" element={<Explore />} />
               <Route path="/companies" element={<Companies />} />
               <Route path="/categories" element={<Categories />} />
               <Route path="/compare" element={<Compare />} />

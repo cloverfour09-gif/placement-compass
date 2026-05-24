@@ -29,7 +29,7 @@ export default function Login() {
     localStorage.setItem("student_email", identifier);
     setTimeout(() => {
       setLoading(false);
-      navigate(mode === "student" ? "/home" : "/analytics");
+      navigate("/home");
     }, 700);
   }
 
