@@ -15,7 +15,7 @@ import Compare from "./pages/Compare";
 import SkillMapping from "./pages/SkillMapping";
 import Explore from "./pages/Explore";
 import Analytics from "./pages/Analytics";
-import CompanyDetail from "./pages/CompanyDetailNew";
+import CompanyDetail from "./pages/CompanyDetail";
 import HiringRounds from "./pages/HiringRounds";
 import Innovox from "./pages/Innovox";
 import PlacementAnalyzer from "./pages/PlacementAnalyzer";

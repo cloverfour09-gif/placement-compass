@@ -1,11 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { useState } from "react";
 import { useParams, Link } from "react-router-dom";
-import { useCompany } from "@/hooks/useCompanies";
+import { useCompany, useCompanies } from "@/hooks/useCompanies";
 import { EmptyState } from "@/components/common/EmptyState";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Globe, Users, TrendingUp, Code2, Briefcase, Zap, MapPin, Building2, Brain } from "lucide-react";
+import { ArrowLeft, Globe, Users, TrendingUp, Code2, Briefcase, Zap, MapPin, Building2, BarChart3, Brain, CheckCircle2, AlertCircle } from "lucide-react";
 import type { Company } from "@/types/company";
 
 function asArray(v: unknown): string[] {
@@ -69,7 +68,8 @@ function GridCards({ items }: { items: { label: string; value: any; icon?: any }
 export default function CompanyDetail() {
   const { id } = useParams();
   const { data: company, isLoading } = useCompany(id);
-  const [imgError, setImgError] = useState(false);
+  const { data: companies = [] } = useCompanies();
+  const [imgError, setImgError] = React.useState(false);
 
   if (isLoading) {
     return <div className="h-96 rounded-2xl bg-gradient-to-br from-surface to-surface/50 border border-border animate-pulse" />;
@@ -331,3 +331,4 @@ export default function CompanyDetail() {
   );
 }
 
+import React from 'react';
